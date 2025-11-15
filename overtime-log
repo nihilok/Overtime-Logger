@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""
+Overtime Logger - Log hours worked to a SQLite database
+"""
+import argparse
+import sqlite3
+import sys
+from datetime import date
+from pathlib import Path
+
+
+def get_db_path():
+    """Get the path to the SQLite database."""
+    data_dir = Path.home() / ".local" / "share" / "overtime-logger"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / "overtime.db"
+
+
+def init_db(db_path):
+    """Initialize the database with the required table."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS overtime_log (
+            date TEXT PRIMARY KEY,
+            hours REAL NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def get_existing_hours(db_path, log_date):
+    """Get existing hours for a given date."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT hours FROM overtime_log WHERE date = ?", (log_date,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else None
+
+
+def log_hours(db_path, log_date, hours, mode='overwrite'):
+    """Log hours to the database."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    if mode == 'add':
+        existing = get_existing_hours(db_path, log_date)
+        hours = hours + existing if existing else hours
+    
+    cursor.execute("""
+        INSERT INTO overtime_log (date, hours) 
+        VALUES (?, ?)
+        ON CONFLICT(date) DO UPDATE SET hours = ?
+    """, (log_date, hours, hours))
+    
+    conn.commit()
+    conn.close()
+    return hours
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Log overtime hours to a SQLite database"
+    )
+    parser.add_argument(
+        "hours",
+        type=float,
+        help="Number of hours to log"
+    )
+    parser.add_argument(
+        "-d", "--date",
+        type=str,
+        default=date.today().isoformat(),
+        help="Date to log hours for (YYYY-MM-DD format, defaults to today)"
+    )
+    
+    args = parser.parse_args()
+    
+    if args.hours < 0:
+        print("Error: Hours must be a positive number", file=sys.stderr)
+        sys.exit(1)
+    
+    db_path = get_db_path()
+    init_db(db_path)
+    
+    existing_hours = get_existing_hours(db_path, args.date)
+    
+    if existing_hours is not None:
+        print(f"Hours already logged for {args.date}: {existing_hours}")
+        print(f"You want to log: {args.hours} hours")
+        print("\nOptions:")
+        print("  [o] Overwrite - Replace existing hours with new value")
+        print("  [a] Add - Add new hours to existing value")
+        print("  [c] Cancel - Do nothing")
+        
+        while True:
+            choice = input("\nYour choice (o/a/c): ").strip().lower()
+            if choice in ['o', 'overwrite']:
+                final_hours = log_hours(db_path, args.date, args.hours, 'overwrite')
+                print(f"✓ Updated {args.date}: {final_hours} hours (overwritten)")
+                break
+            elif choice in ['a', 'add']:
+                final_hours = log_hours(db_path, args.date, args.hours, 'add')
+                print(f"✓ Updated {args.date}: {final_hours} hours (added {args.hours})")
+                break
+            elif choice in ['c', 'cancel']:
+                print("Cancelled. No changes made.")
+                sys.exit(0)
+            else:
+                print("Invalid choice. Please enter 'o', 'a', or 'c'.")
+    else:
+        log_hours(db_path, args.date, args.hours)
+        print(f"✓ Logged {args.hours} hours for {args.date}")
+
+
+if __name__ == "__main__":
+    main()
