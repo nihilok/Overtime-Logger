@@ -18,6 +18,8 @@ _Adjust paths according to where the repo was cloned to_
 
 ## Usage
 
+### Logging Hours
+
 Log hours for today:
 ```bash
 overtime-log 3.5
@@ -28,6 +30,18 @@ Log hours for a specific date:
 overtime-log 2.5 --date 2025-11-14
 ```
 
+### Generating Reports
+
+View a report for the last full month (e.g., in December, this shows November):
+```bash
+overtime-log --report
+```
+
+View a report for a custom date range:
+```bash
+overtime-log --report --start 2024-11-01 --end 2024-11-30
+```
+
 ## Features
 
 - **Automatic database creation**: Database is stored in `~/.local/share/overtime-logger/overtime.db`
@@ -36,6 +50,9 @@ overtime-log 2.5 --date 2025-11-14
   - **Add**: Add to the existing value
   - **Cancel**: Keep the existing value unchanged
 - **Date flexibility**: Defaults to today, but you can specify any date in YYYY-MM-DD format
+- **Reporting**: Generate reports for any time period, defaulting to the last full month
+  - Shows each date with day of week and hours worked
+  - Displays total hours for the period
 
 ## Database Location
 
@@ -63,6 +80,22 @@ Options:
 
 Your choice (o/a/c): a
 ✓ Updated 2025-11-15: 5.5 hours (added 2.0)
+
+# Generate a report for last full month
+$ overtime-log --report
+==================================================
+Overtime Report: November 2024
+Period: 2024-11-01 to 2024-11-30
+==================================================
+
+  2024-11-05 (Tuesday  ):   2.50 hours
+  2024-11-12 (Tuesday  ):   1.50 hours
+  2024-11-20 (Wednesday):   3.00 hours
+  2024-11-28 (Thursday ):   2.00 hours
+
+--------------------------------------------------
+  Total:                    9.00 hours
+==================================================
 ```
 
 ## Querying the Database

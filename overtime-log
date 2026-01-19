@@ -5,8 +5,9 @@ Overtime Logger - Log hours worked to a SQLite database
 import argparse
 import sqlite3
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from calendar import monthrange
 
 
 def get_db_path():
@@ -60,6 +61,59 @@ def log_hours(db_path, log_date, hours, mode='overwrite'):
     return hours
 
 
+def get_last_full_month():
+    """Get the year and month of the last full month."""
+    today = date.today()
+    if today.month == 1:
+        return today.year - 1, 12
+    return today.year, today.month - 1
+
+
+def generate_report(db_path, start_date=None, end_date=None):
+    """Generate a report for a given time frame."""
+    if start_date is None or end_date is None:
+        year, month = get_last_full_month()
+        last_day = monthrange(year, month)[1]
+        start_date = date(year, month, 1).isoformat()
+        end_date = date(year, month, last_day).isoformat()
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT date, hours 
+        FROM overtime_log 
+        WHERE date >= ? AND date <= ?
+        ORDER BY date
+    """, (start_date, end_date))
+    
+    results = cursor.fetchall()
+    conn.close()
+    
+    if not results:
+        print(f"No overtime logged for period: {start_date} to {end_date}")
+        return
+    
+    # Parse dates for display
+    start_dt = datetime.fromisoformat(start_date)
+    end_dt = datetime.fromisoformat(end_date)
+    
+    print(f"\n{'='*50}")
+    print(f"Overtime Report: {start_dt.strftime('%B %Y')}")
+    print(f"Period: {start_date} to {end_date}")
+    print(f"{'='*50}\n")
+    
+    total_hours = 0
+    for log_date, hours in results:
+        dt = datetime.fromisoformat(log_date)
+        day_name = dt.strftime('%A')
+        print(f"  {log_date} ({day_name:9s}): {hours:6.2f} hours")
+        total_hours += hours
+    
+    print(f"\n{'-'*50}")
+    print(f"  {'Total:':<23s} {total_hours:6.2f} hours")
+    print(f"{'='*50}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Log overtime hours to a SQLite database"
@@ -67,6 +121,7 @@ def main():
     parser.add_argument(
         "hours",
         type=float,
+        nargs='?',
         help="Number of hours to log"
     )
     parser.add_argument(
@@ -75,15 +130,39 @@ def main():
         default=date.today().isoformat(),
         help="Date to log hours for (YYYY-MM-DD format, defaults to today)"
     )
+    parser.add_argument(
+        "-r", "--report",
+        action="store_true",
+        help="Generate a report (defaults to last full month)"
+    )
+    parser.add_argument(
+        "-s", "--start",
+        type=str,
+        help="Start date for report (YYYY-MM-DD format)"
+    )
+    parser.add_argument(
+        "-e", "--end",
+        type=str,
+        help="End date for report (YYYY-MM-DD format)"
+    )
     
     args = parser.parse_args()
+    
+    db_path = get_db_path()
+    init_db(db_path)
+    
+    # Handle report mode
+    if args.report:
+        generate_report(db_path, args.start, args.end)
+        return
+    
+    # Hours are required for logging mode
+    if args.hours is None:
+        parser.error("the following arguments are required: hours (use -r/--report for report mode)")
     
     if args.hours < 0:
         print("Error: Hours must be a positive number", file=sys.stderr)
         sys.exit(1)
-    
-    db_path = get_db_path()
-    init_db(db_path)
     
     existing_hours = get_existing_hours(db_path, args.date)
     
